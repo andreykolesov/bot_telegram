@@ -23,3 +23,5 @@ ARCHIVE_EXTENSIONS = {'.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.iso', '.ar
 
 if not TELEGRAM_TOKEN or not DB_URL:
     raise ValueError("Ошибка: Проверьте файл .env")
+
+PASSWORD_SALT = os.getenv("PASSWORD_SALT")

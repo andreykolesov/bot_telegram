@@ -1,12 +1,11 @@
 import hashlib
 from sqlalchemy.orm import joinedload
 from database.models import User, UserRole
-from config import CREATOR_ID
+from config import CREATOR_ID, PASSWORD_SALT
 
 
 def hash_password(password: str) -> str:
-    salt = "antivirus_bot_secret_salt_"
-    return hashlib.sha256((salt + password).encode()).hexdigest()
+    return hashlib.sha256((PASSWORD_SALT + password).encode()).hexdigest()
 
 
 def register_user(session, tg_user, login, password):
