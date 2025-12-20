@@ -1,13 +1,12 @@
 import os
 import hashlib
 import html
-import datetime
 from aiogram import Router, F, types, Bot
 from aiogram.fsm.context import FSMContext
 from config import ARCHIVE_EXTENSIONS
 from database.models import FileArtifact, Scan, ScanResult, Threat, ScannerTool
 from services.audit import log_audit
-from services.scanner import check_file_with_yara, analyze_pe_file, check_virustotal
+from services.scanner import check_file_with_yara, analyze_pe_file, check_virustotal, lookup_hash_only
 
 router = Router()
 
@@ -35,16 +34,7 @@ def build_report(name, size, hash_sum, results, verdict, is_admin):
 
     for tool_name, res in results.items():
         status = res['status']
-
-        if status == 'infected':
-            icon = "❌"
-        elif status == 'suspicious':
-            icon = "⚠️"
-        elif status == 'clean':
-            icon = "✅"
-        else:
-            icon = "❓"
-
+        icon = "❌" if status == 'infected' else ("⚠️" if status == 'suspicious' else "✅")
         msg += f"<b>{tool_name}</b>: {icon} {status.upper()}\n"
 
         details = res.get('details')
@@ -52,21 +42,37 @@ def build_report(name, size, hash_sum, results, verdict, is_admin):
             if status in ['infected', 'suspicious']:
                 msg += "   └ 🔎 <i>Вердикт:</i>\n"
                 for item in details:
-                    clean_item = html.escape(str(item))
-                    msg += f"      • {clean_item}\n"
-
+                    msg += f"      • {html.escape(str(item))}\n"
             elif tool_name == 'VirusTotal' and len(details) > 0:
                 msg += f"   └ 📊 <i>{html.escape(details[0])}</i>\n"
 
         if res.get('link'):
             msg += f"   👉 <a href='{res['link']}'>Полный отчет на сайте</a>\n"
-
         msg += "\n"
 
     if is_admin:
         msg += f"{'―' * 15}\n🛠 <b>SHA256:</b>\n<code>{hash_sum}</code>"
-
     return msg
+
+
+@router.message(F.text)
+async def scan_text_hash(message: types.Message, state: FSMContext):
+    text = message.text.strip().lower()
+    if len(text) not in [32, 64] or not all(c in '0123456789abcdef' for c in text): return
+
+    msg = await message.answer(f"🔎 <b>Хеш ({len(text)} симв.)</b>\nЗапрос в VirusTotal...", parse_mode="HTML")
+    try:
+        status, details, link = lookup_hash_only(text)
+
+        header = "🔴 <b>УГРОЗА</b>" if status == "infected" else (
+            "🟢 <b>ЧИСТО</b>" if status == "clean" else "⚪️ <b>НЕ НАЙДЕНО</b>")
+        det_str = details[0] if isinstance(details, list) and details else str(details)
+
+        resp = f"{header}\n\n🆔 <b>Запрос:</b> <code>{text}</code>\n📊 <b>Вердикт:</b> {status.upper()}\n📝 <b>Инфо:</b> {html.escape(det_str)}"
+        if link: resp += f"\n\n👉 <a href='{link}'>Открыть на VirusTotal</a>"
+        await msg.edit_text(resp, parse_mode="HTML", disable_web_page_preview=True)
+    except Exception as e:
+        await msg.edit_text(f"⚠️ Ошибка: {e}")
 
 
 @router.message(F.document)
@@ -98,37 +104,40 @@ async def scan_file(m: types.Message, state: FSMContext, bot: Bot, session):
 
         art = session.query(FileArtifact).filter_by(sha256_hash=sha_hex).first()
         if not art:
-            art = FileArtifact(
-                sha256_hash=sha_hex, md5_hash=md5_hex,
-                size_bytes=doc.file_size, mime_type=doc.mime_type, extension=ext
-            )
-            session.add(art);
+            art = FileArtifact(sha256_hash=sha_hex, md5_hash=md5_hex, size_bytes=doc.file_size, mime_type=doc.mime_type,
+                               extension=ext)
+            session.add(art)
             session.commit()
 
         scan = Scan(user_id=data['user_id'], file_id=art.id, filename_at_upload=doc.file_name, status="processing")
-        session.add(scan);
+        session.add(scan)
         session.commit()
         log_audit(session, m.from_user.id, "SCAN", f"File: {doc.file_name}")
 
         res = {}
-        inf = False;
+        inf = False
         susp = False
 
         yt = session.query(ScannerTool).filter_by(name="YARA").first()
         if yt:
             s, d = check_file_with_yara(path)
-            session.add(ScanResult(scan_id=scan.id, scanner_tool_id=yt.id, verdict=s))
+            scan_res = ScanResult(scan_id=scan.id, scanner_tool_id=yt.id, verdict=s)
+            session.add(scan_res)
+            session.flush()
+
             if s == "infected":
                 inf = True
-                for t in d: session.add(
-                    Threat(scan_result_id=scan.id, threat_type="Yara Rule", threat_name=t, danger_level="High"))
+                for t_name in d:
+                    session.add(Threat(scan_result_id=scan_res.id, threat_type="Yara Rule", threat_name=t_name,
+                                       danger_level="High"))
             res['YARA Rules'] = {'status': s, 'details': d}
 
         if ext in ['.exe', '.dll', '.sys']:
             pt = session.query(ScannerTool).filter_by(name="PEFile").first()
             if pt:
                 s, d = analyze_pe_file(path)
-                session.add(ScanResult(scan_id=scan.id, scanner_tool_id=pt.id, verdict=s))
+                scan_res = ScanResult(scan_id=scan.id, scanner_tool_id=pt.id, verdict=s)
+                session.add(scan_res)
                 if s == "suspicious": susp = True
                 res['PE Structure'] = {'status': s, 'details': d}
 
@@ -140,12 +149,11 @@ async def scan_file(m: types.Message, state: FSMContext, bot: Bot, session):
                 pass
 
             s, details, l = check_virustotal(path, sha_hex)
+            raw_str = str(details[:5]) + f" | {l}"
 
-            raw_output = str(details[:5]) + f" | {l}"
-
-            scan_res = ScanResult(scan_id=scan.id, scanner_tool_id=vt.id, verdict=s, raw_output=raw_output)
+            scan_res = ScanResult(scan_id=scan.id, scanner_tool_id=vt.id, verdict=s, raw_output=raw_str)
             session.add(scan_res)
-            session.commit()
+            session.flush()
 
             if s == "infected":
                 inf = True
@@ -167,14 +175,8 @@ async def scan_file(m: types.Message, state: FSMContext, bot: Bot, session):
         scan.status = "finished"
         session.commit()
 
-        report_text = build_report(
-            doc.file_name,
-            doc.file_size,
-            sha_hex,
-            res,
-            scan.overall_verdict,
-            data.get('is_admin')
-        )
+        report_text = build_report(doc.file_name, doc.file_size, sha_hex, res, scan.overall_verdict,
+                                   data.get('is_admin'))
 
         await m.answer(report_text, parse_mode="HTML", disable_web_page_preview=True)
         await stm.delete()

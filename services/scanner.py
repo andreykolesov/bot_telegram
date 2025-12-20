@@ -29,6 +29,29 @@ def check_virustotal(path, file_hash):
         return "error", [str(e)], gui_link
 
 
+def lookup_hash_only(hash_string):
+    if not VIRUSTOTAL_API_KEY or "YOUR" in VIRUSTOTAL_API_KEY:
+        return "skipped", ["API Key не настроен"], ""
+
+    headers = {"x-apikey": VIRUSTOTAL_API_KEY}
+    gui_link = f"https://www.virustotal.com/gui/file/{hash_string}"
+
+    try:
+        response = requests.get(f"{VIRUSTOTAL_URL}/{hash_string}", headers=headers)
+
+        if response.status_code == 200:
+            return _parse_vt_response(response.json(), gui_link)
+
+        elif response.status_code == 404:
+            return "unknown", ["Файл с таким хешем не найден в базе VirusTotal"], gui_link
+
+        else:
+            return "error", [f"HTTP Error {response.status_code}"], gui_link
+
+    except Exception as e:
+        return "error", [str(e)], gui_link
+
+
 def _upload_large_file(path, headers, gui_link):
     try:
         url_resp = requests.get("https://www.virustotal.com/api/v3/files/upload_url", headers=headers)
@@ -124,6 +147,7 @@ def check_file_with_yara(path):
 
 
 def analyze_pe_file(path):
+    pe = None
     try:
         pe = pefile.PE(path)
         if len(pe.sections) < 1:
@@ -133,3 +157,6 @@ def analyze_pe_file(path):
         return "clean", ["Не является PE-файлом"]
     except Exception as e:
         return "error", [str(e)]
+    finally:
+        if pe:
+            pe.close()
