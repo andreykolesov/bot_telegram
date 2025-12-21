@@ -17,7 +17,8 @@ DB_URL = os.getenv("DB_URL")
 BACKUP_DIR = os.path.join(BASE_DIR, "backups")
 TEMP_DIR = os.path.join(BASE_DIR, "temp")
 
-YARA_RULES_PATH = os.path.join(BASE_DIR, "rules", "suspicious.yar")
+YARA_GENERIC_PATH = os.path.join(BASE_DIR, "rules", "generic.yar")
+YARA_PE_PATH = os.path.join(BASE_DIR, "rules", "pe.yar")
 
 ARCHIVE_EXTENSIONS = {'.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.iso', '.arj', '.cab'}
 

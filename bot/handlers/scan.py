@@ -34,20 +34,33 @@ def build_report(name, size, hash_sum, results, verdict, is_admin):
 
     for tool_name, res in results.items():
         status = res['status']
-        icon = "❌" if status == 'infected' else ("⚠️" if status == 'suspicious' else "✅")
+
+        if status == 'infected':
+            icon = "❌"
+        elif status == 'suspicious':
+            icon = "⚠️"
+        elif status == 'clean':
+            icon = "✅"
+        elif status == 'skipped':
+            icon = "⏩"
+        elif status == 'error':
+            icon = "❗️"
+        else:
+            icon = "❓"
+
         msg += f"<b>{tool_name}</b>: {icon} {status.upper()}\n"
 
         details = res.get('details')
-        if details and isinstance(details, list):
-            if status in ['infected', 'suspicious']:
-                msg += "   └ 🔎 <i>Вердикт:</i>\n"
-                for item in details:
+        if details:
+            if status in ['infected', 'suspicious', 'error', 'skipped'] or (tool_name == 'VirusTotal' and details):
+                msg += "   └ 🔎 <i>Инфо:</i>\n"
+                items = details if isinstance(details, list) else [str(details)]
+                for item in items:
                     msg += f"      • {html.escape(str(item))}\n"
-            elif tool_name == 'VirusTotal' and len(details) > 0:
-                msg += f"   └ 📊 <i>{html.escape(details[0])}</i>\n"
 
         if res.get('link'):
             msg += f"   👉 <a href='{res['link']}'>Полный отчет на сайте</a>\n"
+
         msg += "\n"
 
     if is_admin:
@@ -104,18 +117,20 @@ async def scan_file(m: types.Message, state: FSMContext, bot: Bot, session):
 
         art = session.query(FileArtifact).filter_by(sha256_hash=sha_hex).first()
         if not art:
-            art = FileArtifact(sha256_hash=sha_hex, md5_hash=md5_hex, size_bytes=doc.file_size, mime_type=doc.mime_type,
-                               extension=ext)
-            session.add(art)
+            art = FileArtifact(
+                sha256_hash=sha_hex, md5_hash=md5_hex,
+                size_bytes=doc.file_size, mime_type=doc.mime_type, extension=ext
+            )
+            session.add(art);
             session.commit()
 
         scan = Scan(user_id=data['user_id'], file_id=art.id, filename_at_upload=doc.file_name, status="processing")
-        session.add(scan)
+        session.add(scan);
         session.commit()
         log_audit(session, m.from_user.id, "SCAN", f"File: {doc.file_name}")
 
         res = {}
-        inf = False
+        inf = False;
         susp = False
 
         yt = session.query(ScannerTool).filter_by(name="YARA").first()
@@ -175,8 +190,10 @@ async def scan_file(m: types.Message, state: FSMContext, bot: Bot, session):
         scan.status = "finished"
         session.commit()
 
-        report_text = build_report(doc.file_name, doc.file_size, sha_hex, res, scan.overall_verdict,
-                                   data.get('is_admin'))
+        report_text = build_report(
+            doc.file_name, doc.file_size, sha_hex, res,
+            scan.overall_verdict, data.get('is_admin')
+        )
 
         await m.answer(report_text, parse_mode="HTML", disable_web_page_preview=True)
         await stm.delete()
