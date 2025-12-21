@@ -27,7 +27,7 @@ def get_admin_keyboard(is_creator):
     b = InlineKeyboardBuilder()
 
     b.button(text="💾 Бэкап БД", callback_data="do_backup")
-    b.button(text="📄 Скачать отчет (CSV)", callback_data="export_csv")
+    b.button(text="📥 Скачать отчет", callback_data="admin_export_menu")
     b.button(text="📨 Вопросы пользователей", callback_data="support_list")
 
     if is_creator:
@@ -43,6 +43,15 @@ def get_admin_keyboard(is_creator):
     else:
         b.adjust(2, 1, 2, 1, 1)
 
+    return b.as_markup()
+
+
+def get_export_formats_keyboard():
+    b = InlineKeyboardBuilder()
+    b.button(text="📄 CSV", callback_data="export_csv")
+    b.button(text="📑 PDF", callback_data="export_pdf")
+    b.button(text="🔙 Назад", callback_data="admin_panel")
+    b.adjust(2, 1)
     return b.as_markup()
 
 
