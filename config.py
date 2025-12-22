@@ -22,6 +22,8 @@ YARA_PE_PATH = os.path.join(BASE_DIR, "rules", "pe.yar")
 
 PG_DUMP_PATH = os.getenv("PG_DUMP_PATH", "pg_dump")
 
+YANDEX_DISK_TOKEN = os.getenv("YANDEX_DISK_TOKEN")
+
 ARCHIVE_EXTENSIONS = {'.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.iso', '.arj', '.cab'}
 
 if not TELEGRAM_TOKEN or not DB_URL:
