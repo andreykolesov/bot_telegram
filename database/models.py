@@ -104,6 +104,8 @@ class Backup(Base):
     status = Column(String(20))
     backup_size_bytes = Column(BigInteger)
     remote_url = Column(String(1000))
+    initiator_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    initiator = relationship("User", foreign_keys=[initiator_id])
 
 class SupportTicket(Base):
     __tablename__ = 'support_tickets'
