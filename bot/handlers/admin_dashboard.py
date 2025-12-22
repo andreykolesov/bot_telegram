@@ -25,7 +25,7 @@ async def pan(c: types.CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "do_backup")
 async def bac(c: types.CallbackQuery, session):
     await c.message.answer("⏳ Бэкап...")
-    await c.message.answer(perform_backup(session))
+    await c.message.answer(perform_backup(session, c.from_user.id))
     await c.answer()
 
 
