@@ -41,8 +41,6 @@ def build_report(name, size, hash_sum, results, verdict, is_admin):
             icon = "⚠️"
         elif status == 'clean':
             icon = "✅"
-        elif status == 'skipped':
-            icon = "⏩"
         elif status == 'error':
             icon = "❗️"
         else:
@@ -52,19 +50,18 @@ def build_report(name, size, hash_sum, results, verdict, is_admin):
 
         details = res.get('details')
         if details:
-            if status in ['infected', 'suspicious', 'error', 'skipped'] or (tool_name == 'VirusTotal' and details):
+            if status in ['infected', 'suspicious', 'error'] or (tool_name == 'VirusTotal' and details):
                 msg += "   └ 🔎 <i>Инфо:</i>\n"
                 items = details if isinstance(details, list) else [str(details)]
                 for item in items:
-                    msg += f"      • {html.escape(str(item))}\n"
+                    clean_item = html.escape(str(item))
+                    msg += f"      • {clean_item}\n"
 
         if res.get('link'):
             msg += f"   👉 <a href='{res['link']}'>Полный отчет на сайте</a>\n"
 
         msg += "\n"
 
-    if is_admin:
-        msg += f"{'―' * 15}\n🛠 <b>SHA256:</b>\n<code>{hash_sum}</code>"
     return msg
 
 
