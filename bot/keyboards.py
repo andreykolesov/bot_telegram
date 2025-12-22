@@ -26,7 +26,7 @@ def get_main_menu_keyboard(is_admin):
 def get_admin_keyboard(is_creator):
     b = InlineKeyboardBuilder()
 
-    b.button(text="💾 Бэкап БД", callback_data="do_backup")
+    b.button(text="💾 Бэкап БД", callback_data="backup_menu")
     b.button(text="📥 Скачать отчет", callback_data="admin_export_menu")
     b.button(text="📨 Вопросы пользователей", callback_data="support_list")
 
@@ -43,6 +43,15 @@ def get_admin_keyboard(is_creator):
     else:
         b.adjust(2, 1, 2, 1, 1)
 
+    return b.as_markup()
+
+
+def get_backup_selection_keyboard():
+    b = InlineKeyboardBuilder()
+    b.button(text="💻 Только Локально", callback_data="do_backup_local")
+    b.button(text="☁️ На Яндекс.Диск", callback_data="do_backup_yandex")
+    b.button(text="🔙 Назад", callback_data="admin_panel")
+    b.adjust(1)
     return b.as_markup()
 
 

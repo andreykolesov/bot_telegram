@@ -4,7 +4,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import FSInputFile
 from config import CREATOR_ID
 from bot.states import AdminStates
-from bot.keyboards import get_admin_keyboard, get_cancel_keyboard, get_export_formats_keyboard
+from bot.keyboards import get_admin_keyboard, get_cancel_keyboard, get_export_formats_keyboard, \
+    get_backup_selection_keyboard
 from services.manage import set_user_block_status, delete_user_by_login, toggle_admin_role
 from services.backup import perform_backup
 from services.export import export_audit_log
@@ -22,11 +23,28 @@ async def pan(c: types.CallbackQuery, state: FSMContext):
     await c.message.edit_text("🛠 <b>Админ панель</b>", reply_markup=get_admin_keyboard(is_creator), parse_mode="HTML")
 
 
-@router.callback_query(F.data == "do_backup")
-async def bac(c: types.CallbackQuery, session):
-    await c.message.answer("⏳ Бэкап...")
-    await c.message.answer(perform_backup(session, c.from_user.id))
-    await c.answer()
+@router.callback_query(F.data == "backup_menu")
+async def backup_menu(c: types.CallbackQuery):
+    await c.message.edit_text("💾 <b>Выберите тип резервного копирования:</b>",
+                              reply_markup=get_backup_selection_keyboard(), parse_mode="HTML")
+
+
+@router.callback_query(F.data == "do_backup_local")
+async def bac_local(c: types.CallbackQuery, session):
+    await c.message.edit_text("⏳ Создаю локальный бэкап...", parse_mode="HTML")
+    res = perform_backup(session, c.from_user.id, target="local")
+    await c.message.answer(res)
+    await c.message.answer("🛠 <b>Админ панель</b>", reply_markup=get_admin_keyboard(c.from_user.id == CREATOR_ID),
+                           parse_mode="HTML")
+
+
+@router.callback_query(F.data == "do_backup_yandex")
+async def bac_yandex(c: types.CallbackQuery, session):
+    await c.message.edit_text("⏳ Создаю и загружаю на Яндекс.Диск...", parse_mode="HTML")
+    res = perform_backup(session, c.from_user.id, target="yandex")
+    await c.message.answer(res)
+    await c.message.answer("🛠 <b>Админ панель</b>", reply_markup=get_admin_keyboard(c.from_user.id == CREATOR_ID),
+                           parse_mode="HTML")
 
 
 @router.callback_query(F.data == "admin_export_menu")
