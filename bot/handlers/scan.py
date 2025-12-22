@@ -1,6 +1,7 @@
 import os
 import hashlib
 import html
+import datetime
 from aiogram import Router, F, types, Bot
 from aiogram.fsm.context import FSMContext
 from config import ARCHIVE_EXTENSIONS
@@ -133,7 +134,14 @@ async def scan_file(m: types.Message, state: FSMContext, bot: Bot, session):
         yt = session.query(ScannerTool).filter_by(name="YARA").first()
         if yt:
             s, d = check_file_with_yara(path)
-            scan_res = ScanResult(scan_id=scan.id, scanner_tool_id=yt.id, verdict=s)
+            yara_raw_str = ", ".join(d) if d else "No matches"
+
+            scan_res = ScanResult(
+                scan_id=scan.id,
+                scanner_tool_id=yt.id,
+                verdict=s,
+                raw_output=yara_raw_str
+            )
             session.add(scan_res)
             session.flush()
 
@@ -148,9 +156,27 @@ async def scan_file(m: types.Message, state: FSMContext, bot: Bot, session):
             pt = session.query(ScannerTool).filter_by(name="PEFile").first()
             if pt:
                 s, d = analyze_pe_file(path)
-                scan_res = ScanResult(scan_id=scan.id, scanner_tool_id=pt.id, verdict=s)
+                pe_raw_str = ", ".join(d) if d else "Structure OK"
+
+                scan_res = ScanResult(
+                    scan_id=scan.id,
+                    scanner_tool_id=pt.id,
+                    verdict=s,
+                    raw_output=pe_raw_str
+                )
                 session.add(scan_res)
-                if s == "suspicious": susp = True
+                session.flush()
+
+                if s == "suspicious":
+                    susp = True
+                    for anomaly in d:
+                        session.add(Threat(
+                            scan_result_id=scan_res.id,
+                            threat_type="PE Anomaly",
+                            threat_name=anomaly,
+                            danger_level="Medium"
+                        ))
+
                 res['PE Structure'] = {'status': s, 'details': d}
 
         vt = session.query(ScannerTool).filter_by(name="VirusTotal API").first()
@@ -185,6 +211,7 @@ async def scan_file(m: types.Message, state: FSMContext, bot: Bot, session):
             scan.overall_verdict = "clean"
 
         scan.status = "finished"
+        scan.finished_at = datetime.datetime.now()
         session.commit()
 
         report_text = build_report(
