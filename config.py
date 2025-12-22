@@ -20,6 +20,8 @@ TEMP_DIR = os.path.join(BASE_DIR, "temp")
 YARA_GENERIC_PATH = os.path.join(BASE_DIR, "rules", "generic.yar")
 YARA_PE_PATH = os.path.join(BASE_DIR, "rules", "pe.yar")
 
+PG_DUMP_PATH = os.getenv("PG_DUMP_PATH", "pg_dump")
+
 ARCHIVE_EXTENSIONS = {'.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.iso', '.arj', '.cab'}
 
 if not TELEGRAM_TOKEN or not DB_URL:
