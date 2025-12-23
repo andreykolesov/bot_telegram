@@ -38,6 +38,7 @@ async def setup_bot_commands(bot: Bot):
 async def main():
     print("Init DB...")
     init_db()
+
     bot = Bot(token=TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher(storage=MemoryStorage())
     dp.update.middleware(DbSessionMiddleware())
@@ -48,8 +49,8 @@ async def main():
         login.router,
         menu.router,
         admin_dashboard.router,
-        scan.router,
-        helpdesk.router
+        helpdesk.router,
+        scan.router
     )
 
     await setup_bot_commands(bot)

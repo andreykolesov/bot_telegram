@@ -18,8 +18,12 @@ async def ask(c: types.CallbackQuery, state: FSMContext):
 
 @router.message(SupportStates.ask_question)
 async def proc_q(m: types.Message, state: FSMContext, session):
-    if not m.text: return await m.answer("Пришлите текст.")
-    tid = create_ticket(session, (await state.get_data())['user_id'], m.text)
+    if not m.text:
+        return await m.answer("Пришлите текст.")
+
+    data = await state.get_data()
+    tid = create_ticket(session, data['user_id'], m.text)
+
     await m.answer(f"✅ <b>Тикет #{tid} создан!</b>\nЖдите ответа.", parse_mode="HTML")
 
     is_admin = (await state.get_data()).get('is_admin')
@@ -29,9 +33,14 @@ async def proc_q(m: types.Message, state: FSMContext, session):
 
 @router.callback_query(F.data == "support_list")
 async def sl(c: types.CallbackQuery, state: FSMContext, session):
-    if not (await state.get_data()).get('is_admin'): return await c.answer("Нет прав", True)
+    data = await state.get_data()
+    if not data.get('is_admin'):
+        return await c.answer("Нет прав", True)
+
     t = get_open_tickets(session)
-    if not t: return await c.answer("Нет вопросов", True)
+    if not t:
+        return await c.answer("Нет открытых вопросов", True)
+
     await c.message.edit_text(f"📨 <b>Открытые вопросы ({len(t)}):</b>", reply_markup=get_tickets_list_keyboard(t),
                               parse_mode="HTML")
 
@@ -40,15 +49,29 @@ async def sl(c: types.CallbackQuery, state: FSMContext, session):
 async def sv(c: types.CallbackQuery, session):
     tid = int(c.data.split("_")[2])
     t = get_ticket_by_id(session, tid)
-    if not t: return await c.answer("Не найден", True)
-    txt = f"📨 <b>Вопрос #{t.id}</b>\n👤 От: <code>{html.escape(t.user.login)}</code>\n📅 Дата: {t.created_at.strftime('%d.%m %H:%M')}\n\n📝 <b>Текст:</b>\n{html.escape(t.question)}"
+
+    if not t:
+        return await c.answer("Тикет не найден", True)
+
+    txt = (
+        f"📨 <b>Вопрос #{t.id}</b>\n"
+        f"👤 От: <code>{html.escape(t.user.login)}</code>\n"
+        f"📅 Дата: {t.created_at.strftime('%d.%m %H:%M')}\n\n"
+        f"📝 <b>Текст:</b>\n{html.escape(t.question)}"
+    )
     await c.message.edit_text(txt, reply_markup=get_ticket_actions_keyboard(t.id), parse_mode="HTML")
 
 
 @router.callback_query(F.data.startswith("support_reply_"))
 async def sr(c: types.CallbackQuery, state: FSMContext):
-    await state.update_data(rtid=int(c.data.split("_")[2]))
-    await c.message.edit_text("✍️ <b>Введите ответ:</b>", reply_markup=get_cancel_support_keyboard(), parse_mode="HTML")
+    tid = int(c.data.split("_")[2])
+    await state.update_data(rtid=tid)
+
+    await c.message.edit_text(
+        f"✍️ <b>Введите ответ на вопрос #{tid}:</b>",
+        reply_markup=get_cancel_support_keyboard(),
+        parse_mode="HTML"
+    )
     await state.set_state(SupportStates.answer_question)
 
 
@@ -56,30 +79,35 @@ async def sr(c: types.CallbackQuery, state: FSMContext):
 async def sa(m: types.Message, state: FSMContext, session, bot: Bot):
     d = await state.get_data()
     t, msg = answer_ticket(session, d['rtid'], d['user_id'], m.text)
+
     if not t:
         await m.answer(f"❌ Ошибка: {msg}")
         await state.set_state(None)
         return
 
     try:
-        await bot.send_message(t.user.telegram_id,
-                               f"🔔 <b>Ответ от поддержки!</b>\n\n❓ <b>Вопрос #{t.id}:</b>\n{html.escape(t.question)}\n\n👮 <b>Ответ:</b>\n{html.escape(m.text)}",
-                               parse_mode="HTML")
+        await bot.send_message(
+            t.user.telegram_id,
+            f"🔔 <b>Ответ от поддержки!</b>\n\n❓ <b>Вопрос #{t.id}:</b>\n{html.escape(t.question)}\n\n👮 <b>Ответ:</b>\n{html.escape(m.text)}",
+            parse_mode="HTML"
+        )
         st = "Доставлено ✅"
     except:
-        st = "Не доставлено ⚠️"
+        st = "Не доставлено (бот заблокирован?) ⚠️"
 
     await m.answer(f"✅ Сохранено. {st}")
 
     ost = get_open_tickets(session)
     if ost:
-        await m.answer("Осталось:", reply_markup=get_tickets_list_keyboard(ost))
+        await m.answer("Остались вопросы:", reply_markup=get_tickets_list_keyboard(ost))
     else:
         await m.answer("Все вопросы закрыты!", reply_markup=get_main_menu_keyboard(d['is_admin']))
+
     await state.set_state(None)
 
 
 @router.callback_query(F.data == "support_cancel")
 async def sc(c: types.CallbackQuery, state: FSMContext):
     await state.set_state(None)
-    await c.message.edit_text("Отмена.", reply_markup=get_main_menu_keyboard((await state.get_data()).get('is_admin')))
+    data = await state.get_data()
+    await c.message.edit_text("Действие отменено.", reply_markup=get_main_menu_keyboard(data.get('is_admin')))
